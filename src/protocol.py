@@ -153,7 +153,12 @@ def receive_frame(sock, trace=None):
         result = bytearray()
         remaining = length
         while remaining:
-            chunk = sock.recv(min(remaining, 65536))
+            try:
+                chunk = sock.recv(min(remaining, 65536))
+            except OSError:
+                if trace and offset:
+                    trace.partial()
+                raise
             if not chunk:
                 if clean_eof and remaining == length:
                     return None

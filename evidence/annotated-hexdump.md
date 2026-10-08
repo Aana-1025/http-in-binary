@@ -2,11 +2,11 @@
 
 This exchange was captured from bserve and bcurl running on Windows with Python 3.11.9.
 
-Command: `python bcurl -v localhost:53702/hello.txt`. A local TCP relay forwarded this request to bserve on port 53701.
+Command: `python bcurl -v localhost:55504/hello.txt`. A local TCP relay forwarded the request to bserve on port 55503.
 
-The relay captured the socket bytes in both directions, which matched the verbose dumps. The client exited with 0, and the returned body matched `www/hello.txt` byte for byte.
+The relay recorded the actual socket bytes in both directions. These matched the verbose dumps, the client exited with 0, and the body matched `www/hello.txt` byte for byte.
 
-Byte ranges below are decimal, inclusive, and start at zero per frame. request-response.hex uses hexadecimal offsets.
+Byte ranges below are decimal, inclusive, and start at zero for each frame. [request-response.hex](request-response.hex) uses hexadecimal offsets.
 
 ## REQUEST
 
@@ -22,7 +22,7 @@ Byte ranges below are decimal, inclusive, and start at zero per frame. request-r
 | 21-22 | Header count | 5 |
 | 23-23 | Name ID | 1 (host) |
 | 24-25 | Value length | 15 |
-| 26-40 | Value | 'localhost:53702' |
+| 26-40 | Value | 'localhost:55504' |
 | 41-41 | Name ID | 2 (user-agent) |
 | 42-43 | Value length | 7 |
 | 44-50 | Value | 'bcurl/1' |
@@ -67,6 +67,6 @@ Total frame: 81 bytes = 8 header bytes + 73 payload bytes.
 
 Total frame: 93 bytes = 8 header bytes + 85 payload bytes.
 
-The ranges cover every byte of both frames. The test suite checks each annotation value against the capture. The response body occupies the remaining payload, with no separate body-length field.
+The ranges cover every byte of both frames. The tests compare each annotation with the capture. The response body is the remaining payload, with no separate body-length field.
 
-The capture records an exchange between the client and server included in this repository.
+The capture records communication between the client and server included in this repository.

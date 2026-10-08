@@ -2,6 +2,7 @@
 
 import io
 import ast
+import os
 import queue
 import re
 import socket
@@ -304,6 +305,76 @@ class LiveProjectTests(unittest.TestCase):
                 self.assertEqual(wire_response(conn)[2], self.text)
         finally:
             large.unlink()
+
+    def test_15_truncated_fields_and_bad_unknown_envelopes_recover(self):
+        prefix = b'\x01\x00\x0a/hello.txt'
+        malformed = [b'\x01\x00\x05/x', prefix,
+                     prefix + b'\xff\xff',
+                     prefix + b'\x00\x01\x00\x00\x05ab',
+                     prefix + b'\x00\x01\x00\x00\x01A\x00\x00',
+                     prefix + b'\x00\x01\x01\x00\x03x',
+                     prefix + b'\x00\x01\x01\x00\x01\xff']
+        frames = [wire_frame(1, payload) for payload in malformed]
+        frames += [wire_frame(99, b'opaque bytes', version=2),
+                   wire_frame(99, b'opaque bytes', reserved=1)]
+        with self.connect() as conn:
+            for frame in frames:
+                conn.sendall(frame)
+                self.assertEqual(wire_response(conn)[0], 400)
+                conn.sendall(wire_request('/hello.txt'))
+                self.assertEqual(wire_response(conn)[2], self.text)
+
+    def test_16_utf8_and_normalized_path(self):
+        name = self.root / 'caf\u00e9.txt'
+        name.write_bytes(b'UTF-8 path, unchanged body\x00\xff')
+        try:
+            self.assertEqual(self.client('/caf\u00e9.txt').stdout, name.read_bytes())
+            self.assertEqual(self.request('//./hello.txt')[2], self.text)
+        finally:
+            name.unlink()
+
+    def test_17_large_valid_binary_file_then_next_request(self):
+        large = self.root / 'near-limit.bin'
+        data = (bytes(range(256)) * (p.MAX_PAYLOAD // 256))[:-1024]
+        large.write_bytes(data)
+        try:
+            with self.connect() as conn:
+                conn.sendall(wire_request('/near-limit.bin'))
+                status, _, body = wire_response(conn)
+                self.assertEqual(status, 200)
+                self.assertEqual(body, data)
+                conn.sendall(wire_request('/hello.txt'))
+                self.assertEqual(wire_response(conn)[2], self.text)
+        finally:
+            large.unlink()
+
+    def test_18_real_directory_link_cannot_escape_root(self):
+        link = self.root / 'outside-link'
+        with tempfile.TemporaryDirectory() as outside:
+            (Path(outside) / 'secret.txt').write_bytes(b'Not under the server root')
+            try:
+                os.symlink(outside, link, target_is_directory=True)
+            except OSError:
+                if sys.platform != 'win32':
+                    raise
+                # Windows directory junctions do not require symlink privileges.
+                result = subprocess.run(['cmd.exe', '/c', 'mklink', '/J', str(link), outside],
+                                        capture_output=True, timeout=5)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            try:
+                self.assertEqual(self.request('/outside-link/secret.txt')[0], 400)
+                self.assertEqual(self.request('/outside-link/missing.txt')[0], 400)
+                self.assertEqual(self.request('/hello.txt')[0], 200)
+            finally:
+                if link.is_symlink():
+                    link.unlink()
+                else:
+                    link.rmdir()  # Remove the junction itself, not its target.
+
+    def test_19_abrupt_disconnect_does_not_stop_server(self):
+        with self.connect() as conn:
+            conn.sendall(wire_request('/hello.txt')[:-1])
+        self.assertEqual(self.request('/hello.txt')[::2], (200, self.text))
 
 
 class EvidenceTests(unittest.TestCase):

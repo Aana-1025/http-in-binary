@@ -8,6 +8,8 @@
 
 This project transfers files over TCP using a small binary protocol. The server, `bserve`, reads a request and returns a file from its root folder. The client, `bcurl`, sends one GET-like request and writes the response body without changing its bytes.
 
+Lengths and status codes are encoded as binary integers. Common header names use one-byte numbers instead of repeated text, keeping the message format compact.
+
 The protocol specification defines the message format so another client or server can implement the same rules. This is a course protocol rather than standard HTTP; browsers and ordinary curl cannot use it directly.
 
 The submission documents are the [two-page specification](SPEC.pdf) and the [annotated request/response hexdump](evidence/annotated-hexdump.md). The specification is also available as [Markdown](SPEC.md), alongside the [raw capture](evidence/request-response.hex).
@@ -45,7 +47,7 @@ The payload limit is 16 MiB, including metadata. Header values are descriptive a
 ├── bserve                     # Server entry point
 ├── bcurl                      # Client entry point
 ├── src/                       # Protocol, server, and client modules
-├── tests/test_project.py      # Protocol and local TCP tests
+├── tests/                     # Protocol, TCP, and error-handling tests
 ├── www/                       # Text, HTML, and binary sample files
 ├── SPEC.md
 ├── SPEC.pdf                   # Two-page protocol specification
@@ -139,7 +141,7 @@ This returns a 404 error body and exit code `1`.
 python -m unittest discover -s tests -v
 ```
 
-The 28 tests cover exact wire bytes, numbered and literal headers, text and binary downloads, root mapping, malformed requests, path protection, persistent connections, unknown frames, verbose dumps, and EOF handling. They also check that the annotated ranges explain every captured byte.
+The tests cover exact wire bytes, numbered and literal headers, text and binary downloads, root mapping, malformed requests, path protection, persistent connections, unknown frames, verbose dumps, and interrupted connections. They also check split and combined reads, folder-link escapes, large files, and every annotated byte in the capture.
 
 Tests launch their own local server and client processes and clean up temporary files. A separately running demonstration server is not needed. If Make is installed, `make test` and `make check` are optional shortcuts.
 
@@ -149,5 +151,5 @@ Tests launch their own local server and client processes and clean up temporary 
 - Paths are literal filenames; percent escapes are not decoded. Requests cannot escape the server root.
 - The server keeps connections open after normal responses and recoverable errors. Oversized or incomplete frames close the connection as specified.
 - The client uses one connection and does not retry. Compression, TLS, and multiplexing are outside this project's scope.
-- Unix-style entry points can be enabled with `chmod +x bserve bcurl`. Testing was performed on Windows.
-- The included client and server have been tested together and against test peers. Interoperability with a separately authored partner endpoint has not been demonstrated.
+- On Unix with Python 3 installed, the executable entry points support `./bserve ./www 9000` and `./bcurl -v localhost:9000/index.html`. If an extracted download loses executable permissions, use `chmod +x bserve bcurl`. Testing was performed on Windows.
+- The included client and server have been tested together and against socket test peers.

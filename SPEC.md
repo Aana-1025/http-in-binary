@@ -15,7 +15,7 @@ Use **TCP**. All integers are unsigned; multibyte integers use **big-endian** by
 | 5 | 8 bits | Version | MUST be 1 |
 | 6–7 | 16 bits | Reserved | MUST be 0 |
 
-Total frame size is **8 + L**. A 32-bit length is easy to encode and leaves expansion room; the **16 MiB payload cap** bounds memory use. Eight bits suffice for type/version; two bytes are reserved. Unlike HTTP/2's 24/8/8/31 arrangement, sequential requests need no stream ID. Only REQUEST and RESPONSE are known types; errors use RESPONSE.
+Total frame size is **8 + L**. A 32-bit length is easy to encode and leaves expansion room; the **16 MiB payload cap** bounds memory use. Eight bits suffice for type/version; two reserved bytes complete the eight-byte header and leave room for future flags. Unlike HTTP/2's 24/8/8/31 arrangement, sequential requests need no stream ID. Only REQUEST and RESPONSE are known types; errors use RESPONSE.
 
 ## 2. Payload layouts
 
@@ -76,4 +76,4 @@ Assignment commands: `./bserve ./www 9000` and `./bcurl -v localhost:9000/index.
 
 Body bytes go unchanged to binary stdout. Diagnostics and `-v` hexdumps go to stderr. Verbose mode dumps every sent/received frame, including skipped frames, with direction, byte offsets, and hex bytes; incomplete captures are labelled partial. Exit **0** for 2xx and **1** for every failure, including 4xx/5xx, invalid input, malformed response, and connection errors.
 
-The course submission includes the program, this two-page specification, and an **annotated hexdump of one actual complete request/response**, explaining every field and byte range. The paired course exercise requires separate endpoint authors exchanging only the specification.
+The course submission includes the program, this two-page specification, and an **annotated hexdump of one actual complete request/response**, explaining every field and byte range.

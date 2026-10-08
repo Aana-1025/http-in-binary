@@ -69,11 +69,11 @@ def main(argv=None):
     parser.add_argument('root')
     parser.add_argument('port', type=int)
     args = parser.parse_args(argv)
-    root = Path(args.root).resolve()
-    if not root.is_dir() or not 1 <= args.port <= 65535:
-        print('bserve: supply an existing folder and port 1-65535', file=sys.stderr)
-        return 1
     try:
+        root = Path(args.root).resolve()
+        if not root.is_dir() or not 1 <= args.port <= 65535:
+            print('bserve: supply an existing folder and port 1-65535', file=sys.stderr)
+            return 1
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
             listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             listener.bind(('127.0.0.1', args.port))
@@ -86,6 +86,6 @@ def main(argv=None):
     except KeyboardInterrupt:
         print('Server stopped', file=sys.stderr)
         return 0
-    except OSError as exc:
+    except (OSError, ValueError, RuntimeError) as exc:
         print(f'bserve: {exc}', file=sys.stderr)
         return 1
