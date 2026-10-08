@@ -6,13 +6,9 @@
 
 **Email:** [antarautane11@gmail.com](mailto:antarautane11@gmail.com)
 
-This project transfers files over TCP using a small binary protocol. The server, `bserve`, reads a request and returns a file from its root folder. The client, `bcurl`, sends one GET-like request and writes the response body without changing its bytes.
+`bserve` is a file server and `bcurl` is its client. They communicate over TCP using a binary message format. Common header names, such as `user-agent`, use one-byte IDs instead of long text names to save bytes.
 
-Lengths and status codes are encoded as binary integers. Common header names use one-byte numbers instead of repeated text, keeping the message format compact.
-
-The protocol specification defines the message format so another client or server can implement the same rules. This is a course protocol rather than standard HTTP; browsers and ordinary curl cannot use it directly.
-
-The submission documents are the [two-page specification](SPEC.pdf) and the [annotated request/response hexdump](evidence/annotated-hexdump.md). The specification is also available as [Markdown](SPEC.md), alongside the [raw capture](evidence/request-response.hex).
+The client requests a file from the server's root folder and writes the returned bytes to stdout. The same format works for text, binary, and empty files. [SPEC.pdf](SPEC.pdf) describes the complete protocol.
 
 ## Main features
 
@@ -36,11 +32,15 @@ Each frame begins with this header:
 | Version | 1 byte | `1` |
 | Reserved | 2 bytes | `0` |
 
-A request contains the GET-like method, a path, and headers. A response contains a numeric status, headers, and the file body. Everything remaining after the response headers is the body; there is no separate body-length field.
+A request contains method `1` (GET), a UTF-8 path, and headers. A response contains a numeric status, headers, and the file body. Everything remaining after the response headers is the body; there is no separate body-length field.
+
+Lengths and status codes are binary integers. For example, `user-agent` is sent as ID `2`, rather than repeating its ten-character name. Other header names use the literal form defined in the specification.
 
 The payload limit is 16 MiB, including metadata. Header values are descriptive and do not override framing. See [SPEC.pdf](SPEC.pdf) for the full encoding and connection rules.
 
-## Repository structure
+The server keeps the connection open after normal responses and recoverable errors. The command-line client uses one connection, sends one request, reads its response, and then closes.
+
+## Project structure
 
 ```text
 .
@@ -52,8 +52,8 @@ The payload limit is 16 MiB, including metadata. Header values are descriptive a
 ├── SPEC.md
 ├── SPEC.pdf                   # Two-page protocol specification
 ├── evidence/
-│   ├── annotated-hexdump.md
-│   └── request-response.hex
+│   ├── annotated-hexdump.md    # Raw bytes and field explanations
+│   └── request-response.hex    # Raw request/response capture
 ├── Makefile                   # Optional check/test shortcuts
 ├── .gitattributes
 └── .gitignore
@@ -61,7 +61,7 @@ The payload limit is 16 MiB, including metadata. Header values are descriptive a
 
 ## Requirements
 
-- Python 3.9 or newer. Tested on Windows with Python 3.11.9.
+- Python 3.9 or newer.
 - Python's standard library only; no packages or compilation are needed.
 - Two terminal windows for running the server and client.
 
@@ -83,7 +83,15 @@ In the first terminal:
 python bserve ./www 9000
 ```
 
-The server listens on `127.0.0.1:9000` and handles one client at a time. Files are served from `www`. Stop it with **Ctrl+C**.
+The server listens on `127.0.0.1:9000` and serves files from `www`, one client at a time. Stop it with **Ctrl+C**. If port 9000 is busy, choose another port in both the server and client commands.
+
+On Unix with Python 3 installed, the assignment's command is:
+
+```sh
+./bserve ./www 9000
+```
+
+If an extracted ZIP loses executable permissions, run `chmod +x bserve bcurl` once.
 
 ## Run the client
 
@@ -99,7 +107,13 @@ The first command prints the contents of `hello.txt`. The second requests `/inde
 ### Verbose hexdump
 
 ```powershell
-python bcurl -v localhost:9000/hello.txt
+python bcurl -v localhost:9000/index.html
+```
+
+On Unix:
+
+```sh
+./bcurl -v localhost:9000/index.html
 ```
 
 `-v` prints the complete sent and received frames, with byte offsets and hexadecimal bytes. Hexdumps and diagnostics go to stderr; stdout contains only the response body. TCP may split a frame across reads, so the dump's line breaks can vary without changing the bytes.
@@ -108,7 +122,7 @@ For a field-by-field explanation of a recorded exchange, see the [annotated hexd
 
 ### Save a binary response
 
-This command avoids differences in how PowerShell versions redirect binary output:
+Use this command in PowerShell to save the bytes directly:
 
 ```powershell
 python -c "import subprocess,sys,pathlib; r=subprocess.run([sys.executable,'bcurl','localhost:9000/sample.bin'],capture_output=True); pathlib.Path('download.bin').write_bytes(r.stdout); sys.exit(r.returncode)"
@@ -117,7 +131,7 @@ python -c "from pathlib import Path; assert Path('download.bin').read_bytes()==P
 
 `sample.bin` contains the byte values 0-255. The downloaded file is ignored by Git.
 
-## Status codes and expected results
+## Status codes and error examples
 
 | Status | Meaning |
 | --- | --- |
@@ -135,6 +149,15 @@ $LASTEXITCODE
 
 This returns a 404 error body and exit code `1`.
 
+An unsafe path also fails:
+
+```powershell
+python bcurl localhost:9000/../secret.txt
+$LASTEXITCODE
+```
+
+This returns a 400 response and exit code `1`. Complete malformed requests within the payload limit receive a 400 without closing the connection. Oversized or incomplete frames close it as described in the specification.
+
 ## Run the tests
 
 ```powershell
@@ -145,11 +168,9 @@ The tests cover exact wire bytes, numbered and literal headers, text and binary 
 
 Tests launch their own local server and client processes and clean up temporary files. A separately running demonstration server is not needed. If Make is installed, `make test` and `make check` are optional shortcuts.
 
-## Notes and limitations
+## Specification and evidence
 
-- If port 9000 is occupied, choose another port in both commands.
-- Paths are literal filenames; percent escapes are not decoded. Requests cannot escape the server root.
-- The server keeps connections open after normal responses and recoverable errors. Oversized or incomplete frames close the connection as specified.
-- The client uses one connection and does not retry. Compression, TLS, and multiplexing are outside this project's scope.
-- On Unix with Python 3 installed, the executable entry points support `./bserve ./www 9000` and `./bcurl -v localhost:9000/index.html`. If an extracted download loses executable permissions, use `chmod +x bserve bcurl`. Testing was performed on Windows.
-- The included client and server have been tested together and against socket test peers.
+- [Two-page protocol specification](SPEC.pdf)
+- [Specification in Markdown](SPEC.md)
+- [Annotated request and response](evidence/annotated-hexdump.md), including raw bytes and field explanations
+- [Raw request/response capture](evidence/request-response.hex)

@@ -2,7 +2,7 @@
 
 **Author:** Antara Utane
 
-**Scope.** The course requires TCP, fixed binary framing with justified widths, request/response exchange, ten numbered header names with a literal fallback, 400/404, persistence, unknown-frame skipping, verbose hexdumps, and an annotated exchange. The exact formats below define this project's protocol. MUST means required for v1 compatibility.
+This specification defines the binary messages exchanged by `bserve` and `bcurl`. The course requires TCP, a fixed frame header, ten numbered headers with a literal fallback, error handling, persistence, unknown-frame skipping, and hexdumps. The exact formats below are this project's design. MUST means required for compatible v1 endpoints.
 
 ## 1. Transport and frame header
 
@@ -19,7 +19,7 @@ Total frame size is **8 + L**. A 32-bit length is easy to encode and leaves expa
 
 ## 2. Payload layouts
 
-Fields are consecutive, with no padding or terminators.
+Fields follow one another, with no padding or terminators.
 
 **REQUEST (type 1, client → server):**
 
@@ -31,7 +31,7 @@ Method MUST be 1 (GET). Path length is 1–65,535; path bytes are UTF-8 text. He
 
 `status:u16 | header_count:u16 | headers | body bytes`
 
-Status is a numeric code from 100 to 599, not text. The server uses **200** for success, **400** for malformed requests, **404** for missing/nonregular files, and **500** for unexpected file errors or a response exceeding the cap. Each response is final. Header count is 0–65,535.
+Status is a numeric code from 100 to 599, not text. The server uses **200** for success, **400** for malformed requests, **404** for missing files or paths that are not regular files, and **500** for unexpected file errors or a response exceeding the cap. Each response is final. Header count is 0–65,535.
 
 After parsing the headers, **all remaining payload bytes are the body**. Body length is L minus the bytes used by status, count, and header entries. There is no separate body-length field. Return exact file bytes, including empty and binary files. Error bodies are short UTF-8 text; wording is not prescribed.
 
@@ -56,17 +56,17 @@ IDs 1–10 name dictionary entries; 11–255 are malformed. Literal names contai
 | 9 | cache-control | Server: `no-store` |
 | 10 | x-protocol-version | Server: `1` |
 
-Normal clients send IDs 1–5; normal servers send IDs 6–10, including errors. Other structurally valid lists are accepted. Headers are descriptive metadata; receivers need not interpret them. Framing determines body length; `content-length` never overrides it. No HTTP caching, compression, or connection-header semantics are implemented.
+Normal clients send IDs 1–5; normal servers send IDs 6–10, including errors. Receivers also accept other correctly encoded lists. Headers describe the message but do not change how it is read. Framing determines body length; `content-length` never overrides it. The other header values do not change protocol behavior.
 
 ## 4. Paths, malformed input, and persistence
 
-Paths MUST start with `/`; `/` means `/index.html`. Otherwise split on `/`, ignore empty and `.` segments, and join under the supplied root. Reject `..` segments, NUL, backslash, colon, or a target whose resolved location is outside the root. **Do not percent-decode or interpret queries/fragments:** characters are literal filename characters. Invalid/unsafe paths return 400; missing files and directories return 404. Root confinement is mandatory without platform-specific mechanisms prescribed.
+Paths MUST start with `/`; `/` means `/index.html`. Otherwise split on `/`, ignore empty and `.` segments, and join under the supplied root. Reject `..` segments, NUL, backslash, colon, or a target whose resolved location is outside the root. **Do not percent-decode or interpret queries/fragments:** characters are literal filename characters. Invalid/unsafe paths return 400; missing files and directories return 404. Every resolved target MUST stay within the root.
 
 Malformed input includes invalid version/reserved fields, a known type in the wrong direction, unsupported method, invalid text/path/header ID, missing fields, fields extending beyond the payload, or extra REQUEST bytes. For a complete eight-byte header with an in-limit L, the server MUST consume the payload, return one 400, and keep the connection open. Do not scan for a guessed boundary.
 
-For an oversized L, return 400 if possible, then close without reading the payload. If EOF occurs partway through a frame, return 400 if the socket permits, then close; transport failure may prevent a reply. Clean EOF between frames ends normally. These are explicit design exceptions for input that cannot be processed safely; ordinary malformed requests preserve persistence. A client receiving malformed input closes and exits unsuccessfully without sending an error frame.
+For an oversized L, return 400 if possible, then close without reading the payload. If EOF occurs partway through a frame, return 400 if the socket permits, then close; a broken connection may prevent a reply. Clean EOF between frames ends normally. Closing for oversized or incomplete frames is a design choice; complete malformed requests keep the connection open. A client receiving malformed input closes and exits unsuccessfully without sending an error frame.
 
-Allow one outstanding request. The server loops: **read frame → handle/skip → reply when required → read next frame**. It MUST keep the connection open after 200, 404, 500, and recoverable 400. The client makes one connection attempt, sends one request, reads its response, then closes. It MUST NOT reconnect or retry. No protocol timeout or address-selection algorithm is prescribed.
+Allow one outstanding request. The server loops: **read frame → handle/skip → reply when required → read next frame**. It MUST keep the connection open after 200, 404, 500, and recoverable 400. The client makes one connection attempt, sends one request, reads its response, then closes. It MUST NOT reconnect or retry.
 
 ## 5. Unknown frames, tools, and evidence
 

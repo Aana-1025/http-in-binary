@@ -394,6 +394,15 @@ class EvidenceTests(unittest.TestCase):
             self.assertEqual(len(data), 8 + int.from_bytes(data[:4], 'big'))
             frames.append(bytes(data))
         annotation = (PROJECT / 'evidence' / 'annotated-hexdump.md').read_text()
+        inline = re.findall(r'```text\n((?:[0-9a-f]{8}  [0-9a-f ]+\n)+)```', annotation)
+        self.assertEqual(len(inline), 2)
+        for expected, block in zip(frames, inline):
+            data = bytearray()
+            for line in block.splitlines():
+                offset, hex_bytes = line.split('  ', 1)
+                self.assertEqual(int(offset, 16), len(data))
+                data.extend(bytes.fromhex(hex_bytes))
+            self.assertEqual(bytes(data), expected)
         tables = re.split(r'## (?:REQUEST|RESPONSE)\n', annotation)[1:]
         self.assertEqual(len(tables), 2)
         for frame, table in zip(frames, tables):
