@@ -1,4 +1,4 @@
-# Binary File Protocol v1
+# HTTP in Binary: Protocol Specification v1
 
 **Author:** Antara Utane
 

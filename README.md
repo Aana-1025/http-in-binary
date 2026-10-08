@@ -1,4 +1,4 @@
-# Binary File Protocol
+# HTTP in Binary
 
 *Network Architecture course project*
 
@@ -68,8 +68,8 @@ The server keeps the connection open after normal responses and recoverable erro
 Clone the repository, or extract a downloaded copy, and open PowerShell in the project folder:
 
 ```powershell
-git clone https://github.com/Aana-1025/network-architecture-project.git
-cd network-architecture-project
+git clone https://github.com/Aana-1025/http-in-binary.git
+cd http-in-binary
 python --version
 ```
 
