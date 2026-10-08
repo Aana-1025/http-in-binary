@@ -1,6 +1,8 @@
 # Binary File Protocol v1
 
-**Scope and authority.** The assignment requires TCP, fixed binary framing with justified widths, request/response exchange, ten numbered header names with a literal fallback, 400/404, persistence, unknown-frame skipping, verbose hexdumps, and an annotated exchange. Exact formats below are our design choices. MUST means required for v1 compatibility. This specification is authoritative; implementation test results are supplied separately.
+**Author:** Antara Utane
+
+**Scope.** The course requires TCP, fixed binary framing with justified widths, request/response exchange, ten numbered header names with a literal fallback, 400/404, persistence, unknown-frame skipping, verbose hexdumps, and an annotated exchange. The exact formats below define this project's protocol. MUST means required for v1 compatibility.
 
 ## 1. Transport and frame header
 
@@ -74,4 +76,4 @@ Assignment commands: `./bserve ./www 9000` and `./bcurl -v localhost:9000/index.
 
 Body bytes go unchanged to binary stdout. Diagnostics and `-v` hexdumps go to stderr. Verbose mode dumps every sent/received frame, including skipped frames, with direction, byte offsets, and hex bytes; incomplete captures are labelled partial. Exit **0** for 2xx and **1** for every failure, including 4xx/5xx, invalid input, malformed response, and connection errors.
 
-Submit the two-page specification, program, and an **annotated hexdump of one actual complete request/response**, explaining every field and byte range. The assignment requires paired endpoint authors exchanging only the specification; testing our own two programs alone does not prove independent interoperability.
+The course submission includes the program, this two-page specification, and an **annotated hexdump of one actual complete request/response**, explaining every field and byte range. The paired course exercise requires separate endpoint authors exchanging only the specification.

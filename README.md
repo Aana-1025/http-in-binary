@@ -1,12 +1,79 @@
-# Binary TCP file server and client
+# Binary File Protocol
 
-A small Network Architecture course project, using **Python 3.9 or newer and its standard library only**. Developed and tested on Windows with Python 3.11.9. No packages, paid services, or cloud accounts are needed.
+*Network Architecture course project*
 
-`bserve` reads a binary request and returns a file. `bcurl` sends one GET-like request and writes the exact response body. This is our course protocol, not regular HTTP: a web browser or ordinary curl cannot talk to it.
+**Author:** Antara Utane
 
-## Run on Windows
+**Email:** [antarautane11@gmail.com](mailto:antarautane11@gmail.com)
 
-Install Python 3.9 or newer if needed, enabling its PATH option. Open PowerShell in the extracted project folder, or your cloned repository folder, where `bserve`, `bcurl`, and `SPEC.md` are visible. From its parent folder, use `cd network-architecture-project`. Check Python with `python --version`. If your installation uses the Python launcher, replace `python` with `py -3` below. No pip install or build step is needed.
+This project transfers files over TCP using a small binary protocol. The server, `bserve`, reads a request and returns a file from its root folder. The client, `bcurl`, sends one GET-like request and writes the response body without changing its bytes.
+
+The protocol specification defines the message format so another client or server can implement the same rules. This is a course protocol rather than standard HTTP; browsers and ordinary curl cannot use it directly.
+
+The submission documents are the [two-page specification](SPEC.pdf) and the [annotated request/response hexdump](evidence/annotated-hexdump.md). The specification is also available as [Markdown](SPEC.md), alongside the [raw capture](evidence/request-response.hex).
+
+## Main features
+
+- Binary REQUEST and RESPONSE frames over TCP.
+- An eight-byte frame header with big-endian integers.
+- Ten numbered header names and a length-prefixed literal-name fallback.
+- Exact text, binary, and empty-file responses.
+- Persistent server connections, including after recoverable malformed requests.
+- Unknown frame types skipped using their payload length.
+- Status codes for successful requests, malformed requests, and missing files.
+- Verbose hexdumps and tests for framing, file handling, and error recovery.
+
+## Protocol overview
+
+Each frame begins with this header:
+
+| Field | Size | Purpose |
+| --- | --- | --- |
+| Payload length | 4 bytes | Number of bytes after the header |
+| Type | 1 byte | `1` REQUEST or `2` RESPONSE |
+| Version | 1 byte | `1` |
+| Reserved | 2 bytes | `0` |
+
+A request contains the GET-like method, a path, and headers. A response contains a numeric status, headers, and the file body. Everything remaining after the response headers is the body; there is no separate body-length field.
+
+The payload limit is 16 MiB, including metadata. Header values are descriptive and do not override framing. See [SPEC.pdf](SPEC.pdf) for the full encoding and connection rules.
+
+## Repository structure
+
+```text
+.
+├── bserve                     # Server entry point
+├── bcurl                      # Client entry point
+├── src/                       # Protocol, server, and client modules
+├── tests/test_project.py      # Protocol and local TCP tests
+├── www/                       # Text, HTML, and binary sample files
+├── SPEC.md
+├── SPEC.pdf                   # Two-page protocol specification
+├── evidence/
+│   ├── annotated-hexdump.md
+│   └── request-response.hex
+├── Makefile                   # Optional check/test shortcuts
+├── .gitattributes
+└── .gitignore
+```
+
+## Requirements
+
+- Python 3.9 or newer. Tested on Windows with Python 3.11.9.
+- Python's standard library only; no packages or compilation are needed.
+- Two terminal windows for running the server and client.
+
+Clone the repository, or extract a downloaded copy, and open PowerShell in the project folder:
+
+```powershell
+git clone https://github.com/Aana-1025/network-architecture-project.git
+cd network-architecture-project
+python --version
+```
+
+Git is only needed for cloning. If Windows uses the Python launcher, replace `python` with `py -3` in the commands below.
+
+## Run the server
 
 In the first terminal:
 
@@ -14,51 +81,73 @@ In the first terminal:
 python bserve ./www 9000
 ```
 
-In a second terminal, in the same folder:
+The server listens on `127.0.0.1:9000` and handles one client at a time. Files are served from `www`. Stop it with **Ctrl+C**.
+
+## Run the client
+
+In the second terminal, from the same project folder:
 
 ```powershell
 python bcurl localhost:9000/hello.txt
 python bcurl localhost:9000/
-python bcurl -v localhost:9000/hello.txt
-python bcurl localhost:9000/missing.txt
-$LASTEXITCODE
 ```
 
-The last request prints an error body and exits with 1. Successful 2xx responses exit with 0; all failures exit with 1. Verbose hex output goes to stderr, so stdout remains the body. Stop the server with **Ctrl+C**. The server listens on `127.0.0.1` for local demonstrations and handles clients one at a time. No compilation step is required.
+The first command prints the contents of `hello.txt`. The second requests `/index.html`, which is the file mapped to `/`.
 
-To save and verify a binary download without relying on PowerShell redirection behaviour:
+### Verbose hexdump
+
+```powershell
+python bcurl -v localhost:9000/hello.txt
+```
+
+`-v` prints the complete sent and received frames, with byte offsets and hexadecimal bytes. Hexdumps and diagnostics go to stderr; stdout contains only the response body. TCP may split a frame across reads, so the dump's line breaks can vary without changing the bytes.
+
+For a field-by-field explanation of a recorded exchange, see the [annotated hexdump](evidence/annotated-hexdump.md).
+
+### Save a binary response
+
+This command avoids differences in how PowerShell versions redirect binary output:
 
 ```powershell
 python -c "import subprocess,sys,pathlib; r=subprocess.run([sys.executable,'bcurl','localhost:9000/sample.bin'],capture_output=True); pathlib.Path('download.bin').write_bytes(r.stdout); sys.exit(r.returncode)"
 python -c "from pathlib import Path; assert Path('download.bin').read_bytes()==Path('www/sample.bin').read_bytes(); print('Exact binary match')"
 ```
 
-`download.bin` is a temporary output, ignored by Git. If port 9000 is occupied, select another port in both commands. Run the second terminal from the same folder; if no response arrives, check that the first terminal is still serving. On Unix-like systems, use `chmod +x bserve bcurl` before the assignment's `./bserve` and `./bcurl` forms. Unix launch behaviour has not been tested here.
+`sample.bin` contains the byte values 0-255. The downloaded file is ignored by Git.
 
-## Check and test
+## Status codes and expected results
+
+| Status | Meaning |
+| --- | --- |
+| 200 | File returned successfully |
+| 400 | Malformed request or unsafe path |
+| 404 | File is missing or the path is not a regular file |
+| 500 | File-reading error or response exceeds the payload limit |
+
+The client exits with **0** for a 2xx response and **1** for failures, including 4xx/5xx responses and connection or protocol errors.
 
 ```powershell
-python -m compileall -q src tests
+python bcurl localhost:9000/missing.txt
+$LASTEXITCODE
+```
+
+This returns a 404 error body and exit code `1`.
+
+## Run the tests
+
+```powershell
 python -m unittest discover -s tests -v
 ```
 
-Tests start and stop their own local server and client processes, choose a temporary port, and clean up temporary sample files. You do not need to leave the demonstration server running. Tests also use independently constructed wire bytes and test peers. If Make is already installed, `make check` and `make test` are optional shortcuts.
+The 28 tests cover exact wire bytes, numbered and literal headers, text and binary downloads, root mapping, malformed requests, path protection, persistent connections, unknown frames, verbose dumps, and EOF handling. They also check that the annotated ranges explain every captured byte.
 
-Full observed test output is in `evidence/test-results.txt`. Tests cover text, binary and empty files; root mapping; 404; malformed requests; traversal protection; persistent connections; unknown-frame skipping; fragmented TCP input; verbose dumps; client failures; clean and partial EOF; oversized input/files; and controlled file errors. Ctrl+C cleanup and resolved-path containment have unit tests; actual Windows junction/symlink behaviour and interactive console Ctrl+C have not been separately demonstrated.
+Tests launch their own local server and client processes and clean up temporary files. A separately running demonstration server is not needed. If Make is installed, `make test` and `make check` are optional shortcuts.
 
-## How to explain it
+## Notes and limitations
 
-- TCP delivers a stream of bytes. The eight-byte header tells us where each message ends.
-- `src/protocol.py` packs/unpacks fields, checks lengths, reads exact byte counts, and dumps hex.
-- `src/server.py` loops over frames on the same connection and serves files confined to the root.
-- `src/client.py` opens one connection, sends a request, reads its response, and outputs the body.
-- Unknown types are skipped using their payload length, allowing future extensions.
-- Response body length comes from the remaining payload, not HTTP headers.
-
-Read **SPEC.md** for the complete wire format and **SPEC.pdf** for its two-page submission rendering. The protocol has not been changed during implementation or audit. Percent sequences are literal filenames; no URL decoding, HTTP caching, compression, automatic retry, or multiplexing is implemented. The 16 MiB payload cap bounds memory use; recoverable malformed requests receive 400 and leave the connection open.
-
-## Files and submission status
-
-`www/index.html`, `www/hello.txt`, and `www/sample.bin` are demonstration files; the binary sample contains every byte value 0–255. The `evidence` folder contains a live request/response dump, its annotation, and test output.
-
-The course requires a **two-page rendered specification** and paired, specification-only collaboration. SPEC.pdf supplies the two-page specification. Our local client/server and independent test peers do not establish actual partner interoperability; that course requirement remains unfulfilled. Git is optional for running the project. The repository contains code, tests, documentation, samples, and evidence; no GitHub publication has been performed.
+- If port 9000 is occupied, choose another port in both commands.
+- Paths are literal filenames; percent escapes are not decoded. Requests cannot escape the server root.
+- The server keeps connections open after normal responses and recoverable errors. Oversized or incomplete frames close the connection as specified.
+- The client uses one connection and does not retry. Compression, TLS, and multiplexing are outside this project's scope.
+- Unix-style entry points can be enabled with `chmod +x bserve bcurl`. Testing was performed on Windows.
+- The included client and server have been tested together and against test peers. Interoperability with a separately authored partner endpoint has not been demonstrated.
