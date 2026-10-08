@@ -2,11 +2,11 @@
 
 **Author:** Antara Utane
 
-This specification defines the binary messages exchanged by `bserve` and `bcurl`. The course requires TCP, a fixed frame header, ten numbered headers with a literal fallback, error handling, persistence, unknown-frame skipping, and hexdumps. The exact formats below are this project's design. MUST means required for compatible v1 endpoints.
+In this project, `bserve` is my file server and `bcurl` is its client. They transfer files over TCP using a compact binary format. The course requires fixed framing, ten numbered headers with a literal fallback, error handling, persistent connections, unknown-frame skipping, and hexdumps. The layouts and limits below are my design choices. MUST means a rule both endpoints must follow.
 
-## 1. Transport and frame header
+## 1. Connection and frame header
 
-Use **TCP**. All integers are unsigned; multibyte integers use **big-endian** byte order. `u8`, `u16`, and `u32` mean one, two, and four bytes. Lengths count bytes, not characters. Reads may split or combine frames: receive exactly eight header bytes, then exactly the declared payload.
+Both programs use **TCP**. Each message is a frame: an eight-byte header followed by a payload (the message data). Integers are unsigned, meaning zero or positive. Multibyte integers use **big-endian** order: the most significant byte comes first. `u8`, `u16`, and `u32` mean one, two, and four bytes. Lengths count bytes, not characters. TCP can split or combine frames, so read exactly eight header bytes, then exactly L payload bytes.
 
 | Byte offset | Width | Field | Meaning and allowed values |
 | --- | --- | --- | --- |
@@ -15,33 +15,35 @@ Use **TCP**. All integers are unsigned; multibyte integers use **big-endian** by
 | 5 | 8 bits | Version | MUST be 1 |
 | 6–7 | 16 bits | Reserved | MUST be 0 |
 
-Total frame size is **8 + L**. A 32-bit length is easy to encode and leaves expansion room; the **16 MiB payload cap** bounds memory use. Eight bits suffice for type/version; two reserved bytes complete the eight-byte header and leave room for future flags. Unlike HTTP/2's 24/8/8/31 arrangement, sequential requests need no stream ID. Only REQUEST and RESPONSE are known types; errors use RESPONSE.
+The total frame size is **8 + L**. I chose four bytes for the length because it is simple to encode and leaves room for expansion. The current **16 MiB payload limit** controls memory use. One byte is enough for each of type and version. Two reserved bytes complete the header and leave room for future flags. Unlike HTTP/2's 24/8/8/31 layout, this protocol handles requests in order and needs no stream ID. Only REQUEST and RESPONSE are known types; errors also use RESPONSE.
 
-## 2. Payload layouts
+## 2. Request and response
 
-Fields follow one another, with no padding or terminators.
+Send the fields in the order shown, with no padding or ending markers.
 
 **REQUEST (type 1, client → server):**
 
 `method:u8 | path_length:u16 | path bytes | header_count:u16 | headers`
 
-Method MUST be 1 (GET). Path length is 1–65,535; path bytes are UTF-8 text. Header count is 0–65,535; parse exactly that many entries. There is no request body and no extra payload data is permitted.
+Method MUST be 1 (GET). The path is UTF-8 text, with a byte length of 1–65,535. Header count is 0–65,535; read exactly that many entries. A request has no body, so any bytes left after its headers make it malformed.
 
 **RESPONSE (type 2, server → client):**
 
 `status:u16 | header_count:u16 | headers | body bytes`
 
-Status is a numeric code from 100 to 599, not text. The server uses **200** for success, **400** for malformed requests, **404** for missing files or paths that are not regular files, and **500** for unexpected file errors or a response exceeding the cap. Each response is final. Header count is 0–65,535.
+The status is an integer from 100 to 599. My server returns **200** for a file, **400** for a malformed request or unsafe path, **404** for a missing file or a path that is not a regular file, and **500** for an unexpected file error or a response above the payload limit. Each response is final, with no interim responses. Header count is 0–65,535.
 
-After parsing the headers, **all remaining payload bytes are the body**. Body length is L minus the bytes used by status, count, and header entries. There is no separate body-length field. Return exact file bytes, including empty and binary files. Error bodies are short UTF-8 text; wording is not prescribed.
+After reading the headers, **all remaining payload bytes are the body**. Its length is L minus the bytes used by the status, count, and headers. There is no separate body-length field. Return the file bytes unchanged, including empty and binary files. Error bodies are short UTF-8 messages; their exact wording may vary.
 
-## 3. Header encoding
+## 3. How headers are stored
+
+Common header names use one-byte IDs to save space. Other names are sent as text with a length in front.
 
 Numbered entry: `name_id:u8 | value_length:u16 | value bytes`.
 
 Literal entry: `0:u8 | name_length:u16 | name bytes | value_length:u16 | value bytes`.
 
-IDs 1–10 name dictionary entries; 11–255 are malformed. Literal names contain only lowercase ASCII letters, digits, and hyphens; name length is 1–65,535. Values are UTF-8 text, possibly empty; value length is 0–65,535. All fields MUST fit the payload. Dictionary names may also use literal form. Receivers MUST accept unfamiliar literal names. Order and repeated names have no special meaning.
+IDs 1–10 refer to the table below; 11–255 are invalid. ID 0 introduces a literal name: lowercase ASCII letters, digits, or hyphens, with a length of 1–65,535. Values are UTF-8 text, with a byte length of 0–65,535; an empty value is valid. Every field must fit within the payload. A numbered name may also be sent in literal form. Receivers must accept valid literal names they do not recognize. Header order and repeated names have no special meaning.
 
 | ID | Name | Normal sender and value |
 | --- | --- | --- |
@@ -56,24 +58,24 @@ IDs 1–10 name dictionary entries; 11–255 are malformed. Literal names contai
 | 9 | cache-control | Server: `no-store` |
 | 10 | x-protocol-version | Server: `1` |
 
-Normal clients send IDs 1–5; normal servers send IDs 6–10, including errors. Receivers also accept other correctly encoded lists. Headers describe the message but do not change how it is read. Framing determines body length; `content-length` never overrides it. The other header values do not change protocol behavior.
+My client sends IDs 1–5, and my server sends IDs 6–10, including in error responses. Receivers also accept other correctly encoded lists. These headers describe the message; they do not control parsing. The frame length determines the body length, even if `content-length` says something different. Other header values do not change protocol behavior.
 
-## 4. Paths, malformed input, and persistence
+## 4. File paths, errors, and connections
 
-Paths MUST start with `/`; `/` means `/index.html`. Otherwise split on `/`, ignore empty and `.` segments, and join under the supplied root. Reject `..` segments, NUL, backslash, colon, or a target whose resolved location is outside the root. **Do not percent-decode or interpret queries/fragments:** characters are literal filename characters. Invalid/unsafe paths return 400; missing files and directories return 404. Every resolved target MUST stay within the root.
+A path must start with `/`. The path `/` means `/index.html`. For other paths, split on `/`, ignore empty and `.` parts, and join the remaining parts under the server root. Reject `..` parts, NUL, backslash, colon, or a resolved target outside that root. **Treat percent escapes, query strings, and fragments as literal filename text:** do not decode or interpret them. An invalid or unsafe path returns 400; missing files and directory requests return 404.
 
-Malformed input includes invalid version/reserved fields, a known type in the wrong direction, unsupported method, invalid text/path/header ID, missing fields, fields extending beyond the payload, or extra REQUEST bytes. For a complete eight-byte header with an in-limit L, the server MUST consume the payload, return one 400, and keep the connection open. Do not scan for a guessed boundary.
+A request is malformed if its version or reserved field is wrong, a known type is sent in the wrong direction, the method is not GET, text or header encoding is invalid, a field is missing or extends past the payload, or extra request bytes remain. For a complete frame within the limit, the server reads all L payload bytes, sends one 400, and keeps the connection open. It does not guess where the next frame starts.
 
-For an oversized L, return 400 if possible, then close without reading the payload. If EOF occurs partway through a frame, return 400 if the socket permits, then close; a broken connection may prevent a reply. Clean EOF between frames ends normally. Closing for oversized or incomplete frames is a design choice; complete malformed requests keep the connection open. A client receiving malformed input closes and exits unsuccessfully without sending an error frame.
+If L is above the limit, send 400 if possible, then close without reading the payload. If the peer ends its data partway through a frame (EOF), send 400 if possible and close. A broken connection may prevent a reply. EOF between frames is a normal end. These closing rules are my design choice for oversized or incomplete input. A client receiving malformed input closes and exits with 1; it does not send an error frame.
 
-Allow one outstanding request. The server loops: **read frame → handle/skip → reply when required → read next frame**. It MUST keep the connection open after 200, 404, 500, and recoverable 400. The client makes one connection attempt, sends one request, reads its response, then closes. It MUST NOT reconnect or retry.
+Send only one request at a time and wait for its response. The server repeats **read frame → handle/skip → reply when needed → read next frame** on the same connection. It keeps the connection open after 200, 404, 500, and recoverable 400. My client makes one connection attempt, sends one request, reads its response, and closes. It must never reconnect or retry.
 
-## 5. Unknown frames, tools, and evidence
+## 5. Unknown frames, commands, and hexdumps
 
-**A receiver that encounters an unknown frame type MUST skip it cleanly using the frame length.** For a valid envelope, discard exactly L bytes in small chunks, generate no response solely for that frame, and continue reading. Unknown zero-length frames are valid. Envelope errors/incomplete payloads follow the rules above. A waiting client continues past unknown frames until its response arrives.
+**A receiver that encounters an unknown frame type MUST skip it cleanly using the frame length.** If the header has valid length, version, and reserved fields, discard exactly L bytes in small chunks and read the next frame. Do not reply just because a type is unknown. An unknown frame with L = 0 is valid. Bad headers or incomplete payloads follow the error rules above. A waiting client skips unknown frames until its response arrives.
 
-Assignment commands: `./bserve ./www 9000` and `./bcurl -v localhost:9000/index.html`. Windows equivalents use `python bserve` and `python bcurl` with those arguments. Client input is `host:port/path`, with explicit port 1–65,535; `localhost` suffices for demonstrations.
+Run `./bserve ./www 9000` and `./bcurl -v localhost:9000/index.html`. On Windows, use `python bserve` and `python bcurl` with the same arguments. Client input is `host:port/path`, with a port from 1–65,535; `localhost` works for a local demonstration.
 
-Body bytes go unchanged to binary stdout. Diagnostics and `-v` hexdumps go to stderr. Verbose mode dumps every sent/received frame, including skipped frames, with direction, byte offsets, and hex bytes; incomplete captures are labelled partial. Exit **0** for 2xx and **1** for every failure, including 4xx/5xx, invalid input, malformed response, and connection errors.
+The client writes unchanged body bytes to binary stdout. Error messages and `-v` hexdumps go to stderr. With `-v`, show every sent and received frame, including skipped frames, with direction, byte offsets, and hex bytes. Label incomplete captures as partial. Exit **0** for 2xx responses and **1** for all failures, including 4xx/5xx, invalid input, malformed responses, and connection errors.
 
-The course submission includes the program, this two-page specification, and an **annotated hexdump of one actual complete request/response**, explaining every field and byte range.
+My submission includes both programs, this two-page specification, and an **annotated hexdump of one actual complete request and response**, explaining every field and byte range.
