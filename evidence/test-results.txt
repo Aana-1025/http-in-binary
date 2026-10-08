@@ -1,0 +1,37 @@
+Final pre-commit run from cleaned repository contents.
+Windows; Python 3.11.9
+Command: python -B -m unittest discover -s tests -v
+
+test_client_against_independent_peer (test_project.ErrorAndClientTests.test_client_against_independent_peer) ... ok
+test_client_clean_eof_before_response_and_usage_failure (test_project.ErrorAndClientTests.test_client_clean_eof_before_response_and_usage_failure) ... ok
+test_ctrl_c_closes_server_listener (test_project.ErrorAndClientTests.test_ctrl_c_closes_server_listener) ... ok
+test_file_read_error_returns_500 (test_project.ErrorAndClientTests.test_file_read_error_returns_500) ... ok
+test_oversized_file_returns_500 (test_project.ErrorAndClientTests.test_oversized_file_returns_500) ... ok
+test_resolved_target_outside_root_returns_400 (test_project.ErrorAndClientTests.test_resolved_target_outside_root_returns_400) ... ok
+test_every_captured_byte_has_an_accurate_annotation (test_project.EvidenceTests.test_every_captured_byte_has_an_accurate_annotation) ... ok
+test_01_existing_text_exact_bytes_and_all_server_headers (test_project.LiveProjectTests.test_01_existing_text_exact_bytes_and_all_server_headers) ... ok
+test_02_binary_download_exact_bytes (test_project.LiveProjectTests.test_02_binary_download_exact_bytes) ... ok
+test_03_root_maps_to_index (test_project.LiveProjectTests.test_03_root_maps_to_index) ... ok
+test_04_missing_directory_and_empty (test_project.LiveProjectTests.test_04_missing_directory_and_empty) ... ok
+test_05_malformed_requests_then_valid_on_same_socket (test_project.LiveProjectTests.test_05_malformed_requests_then_valid_on_same_socket) ... ok
+test_06_unsafe_paths_rejected_literal_percent_preserved (test_project.LiveProjectTests.test_06_unsafe_paths_rejected_literal_percent_preserved) ... ok
+test_07_unknown_frame_skipped_and_fragmented_reads (test_project.LiveProjectTests.test_07_unknown_frame_skipped_and_fragmented_reads) ... ok
+test_08_multiple_requests_persist_after_404 (test_project.LiveProjectTests.test_08_multiple_requests_persist_after_404) ... ok
+test_09_verbose_dumps_reconstruct_every_frame_byte (test_project.LiveProjectTests.test_09_verbose_dumps_reconstruct_every_frame_byte) ... ok
+test_10_client_404_exit_one (test_project.LiveProjectTests.test_10_client_404_exit_one) ... ok
+test_11_clean_eof_and_partial_frame_shutdown (test_project.LiveProjectTests.test_11_clean_eof_and_partial_frame_shutdown) ... ok
+test_12_oversized_frame_400_then_eof (test_project.LiveProjectTests.test_12_oversized_frame_400_then_eof) ... ok
+test_13_unknown_literal_header_accepted (test_project.LiveProjectTests.test_13_unknown_literal_header_accepted) ... ok
+test_14_connection_persists_after_500 (test_project.LiveProjectTests.test_14_connection_persists_after_500) ... ok
+test_bad_headers_and_responses_rejected (test_project.ProtocolTests.test_bad_headers_and_responses_rejected) ... ok
+test_encoder_rejects_fields_exceeding_wire_widths (test_project.ProtocolTests.test_encoder_rejects_fields_exceeding_wire_widths) ... ok
+test_exact_eight_byte_big_endian_reference (test_project.ProtocolTests.test_exact_eight_byte_big_endian_reference) ... ok
+test_literal_headers_duplicates_empty_unicode (test_project.ProtocolTests.test_literal_headers_duplicates_empty_unicode) ... ok
+test_response_body_uses_remaining_payload (test_project.ProtocolTests.test_response_body_uses_remaining_payload) ... ok
+test_ten_numbered_headers_exact_encoding (test_project.ProtocolTests.test_ten_numbered_headers_exact_encoding) ... ok
+test_unknown_payload_discarded_without_retaining_it (test_project.ProtocolTests.test_unknown_payload_discarded_without_retaining_it) ... ok
+
+----------------------------------------------------------------------
+Ran 28 tests in 1.994s
+
+OK

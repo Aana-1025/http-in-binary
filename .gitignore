@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.log
+downloads/
+download.bin
+
+# Local credentials and packaging files do not belong in this repository.
+.env
+.env.*
+*.pem
+*.key
+*.zip
+tmp/
+submission/
+Network Architecture Project.jpeg
+IMPLEMENTATION_PLAN.md
+PROTOCOL_PLAN.md

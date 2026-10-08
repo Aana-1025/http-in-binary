@@ -1,0 +1,4 @@
+# Keep scripts portable and preserve binary artifacts byte-for-byte.
+* text=auto eol=lf
+*.pdf binary
+*.bin binary
